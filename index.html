@@ -1640,38 +1640,24 @@
         <div class="section-label">Meteorologisch Rapport</div>
         <h2>Weersverwachting</h2>
 
-        <div class="weather-grid">
+        <div class="weather-grid" id="weather-grid">
             <div class="weather-card">
-                <div class="weather-day">Vr 27 mrt</div>
-                <div class="weather-icon">&#9925;</div>
-                <div class="weather-temp">12&deg;C / 4&deg;C</div>
-                <div class="weather-desc">Gedeeltelijk zonnig<br>Weinig kans regen (20%)</div>
-            </div>
-            <div class="weather-card">
-                <div class="weather-day">Za 28 mrt</div>
+                <div class="weather-day">Laden...</div>
                 <div class="weather-icon">&#9729;</div>
-                <div class="weather-temp">~10&deg;C / 3&deg;C</div>
-                <div class="weather-desc">Wisselvallig / Bewolkt<br>Matige kans regen</div>
-            </div>
-            <div class="weather-card">
-                <div class="weather-day">Zo 29 mrt</div>
-                <div class="weather-icon">&#127783;</div>
-                <div class="weather-temp">~9&deg;C / 3&deg;C</div>
-                <div class="weather-desc">Frisse buien / Wind<br>Kans op neerslag</div>
+                <div class="weather-temp">--</div>
+                <div class="weather-desc">Forecast wordt opgehaald</div>
             </div>
         </div>
 
-        <div class="info-box" style="margin-top: 24px;">
-            <strong>Advies:</strong> Kleed je in laagjes en neem regenkleding mee. 's Nachts kan het dicht bij het vriespunt komen (3-4&deg;C).
+        <div class="info-box" style="margin-top: 24px;" id="weather-advice">
+            <strong>Advies:</strong> Kleed je in laagjes en neem regenkleding mee.
         </div>
 
         <div class="info-box info-dst">
             <strong>Zomertijd:</strong> In de nacht van zaterdag op zondag (29 maart) gaat de klok in het Verenigd Koninkrijk &eacute;&eacute;n uur vooruit (GMT &rarr; BST). Nederland schakelt dezelfde nacht over (CET &rarr; CEST). Het tijdverschil blijft 1 uur. De vluchttijd zondag is al in de nieuwe tijd.
         </div>
 
-        <div class="info-box warning">
-            <strong>Let op:</strong> Dit is een langetermijnvoorspelling (10+ dagen vooruit). De betrouwbaarheid is beperkt. Controleer vlak voor vertrek de actuele buienradar.
-        </div>
+        <div style="font-family: var(--mono); font-size: 0.7rem; color: var(--grey); margin-top: 12px; text-align: right;" id="weather-source">Bron: Open-Meteo.com</div>
     </div>
 </section>
 
@@ -2402,7 +2388,89 @@
        16. SCROLL PROGRESS BAR
        ═══════════════════════════════════════ */
     /* ═══════════════════════════════════════
-       16. COLLAPSIBLE SECTIONS
+       16. LIVE WEATHER (Open-Meteo)
+       ═══════════════════════════════════════ */
+    (function loadWeather() {
+        var tripDates = ['2026-03-27', '2026-03-28', '2026-03-29'];
+        var dayNames = ['Vr 27 mrt', 'Za 28 mrt', 'Zo 29 mrt'];
+        var url = 'https://api.open-meteo.com/v1/forecast?latitude=54.975&longitude=-1.6253'
+            + '&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,weather_code,wind_speed_10m_max'
+            + '&timezone=Europe/London&forecast_days=16';
+
+        var wmoMap = {
+            0: { icon: '\u2600\uFE0F', desc: 'Helder' },
+            1: { icon: '\u26C5', desc: 'Licht bewolkt' },
+            2: { icon: '\u26C5', desc: 'Half bewolkt' },
+            3: { icon: '\u2601\uFE0F', desc: 'Bewolkt' },
+            45: { icon: '\uD83C\uDF2B\uFE0F', desc: 'Mist' },
+            48: { icon: '\uD83C\uDF2B\uFE0F', desc: 'Aanvriezende mist' },
+            51: { icon: '\uD83C\uDF27\uFE0F', desc: 'Lichte motregen' },
+            53: { icon: '\uD83C\uDF27\uFE0F', desc: 'Motregen' },
+            55: { icon: '\uD83C\uDF27\uFE0F', desc: 'Zware motregen' },
+            61: { icon: '\uD83C\uDF27\uFE0F', desc: 'Lichte regen' },
+            63: { icon: '\uD83C\uDF27\uFE0F', desc: 'Regen' },
+            65: { icon: '\uD83C\uDF27\uFE0F', desc: 'Zware regen' },
+            71: { icon: '\u2744\uFE0F', desc: 'Lichte sneeuw' },
+            73: { icon: '\u2744\uFE0F', desc: 'Sneeuw' },
+            75: { icon: '\u2744\uFE0F', desc: 'Zware sneeuw' },
+            80: { icon: '\uD83C\uDF26\uFE0F', desc: 'Lichte buien' },
+            81: { icon: '\uD83C\uDF26\uFE0F', desc: 'Buien' },
+            82: { icon: '\uD83C\uDF26\uFE0F', desc: 'Zware buien' },
+            95: { icon: '\u26C8\uFE0F', desc: 'Onweer' }
+        };
+
+        fetch(url).then(function(r) { return r.json(); }).then(function(data) {
+            var d = data.daily;
+            var grid = document.getElementById('weather-grid');
+            grid.innerHTML = '';
+
+            var minTemp = 99, hasRain = false;
+
+            tripDates.forEach(function(date, di) {
+                var idx = d.time.indexOf(date);
+                if (idx === -1) return;
+
+                var max = Math.round(d.temperature_2m_max[idx]);
+                var min = Math.round(d.temperature_2m_min[idx]);
+                var precip = d.precipitation_sum[idx];
+                var precipProb = d.precipitation_probability_max[idx];
+                var code = d.weather_code[idx];
+                var wind = Math.round(d.wind_speed_10m_max[idx]);
+                var wmo = wmoMap[code] || wmoMap[3];
+
+                if (min < minTemp) minTemp = min;
+                if (precipProb > 40) hasRain = true;
+
+                var card = document.createElement('div');
+                card.className = 'weather-card';
+                card.innerHTML = '<div class="weather-day">' + dayNames[di] + '</div>'
+                    + '<div class="weather-icon">' + wmo.icon + '</div>'
+                    + '<div class="weather-temp">' + max + '\u00B0C / ' + min + '\u00B0C</div>'
+                    + '<div class="weather-desc">' + wmo.desc
+                    + '<br>Regen: ' + precipProb + '% (' + precip + 'mm)'
+                    + '<br>Wind: ' + wind + ' km/h</div>';
+                grid.appendChild(card);
+            });
+
+            // Update advice
+            var advice = document.getElementById('weather-advice');
+            var tips = [];
+            if (hasRain) tips.push('neem regenkleding mee');
+            if (minTemp <= 5) tips.push("'s nachts kan het tot " + minTemp + '\u00B0C komen, kleed je warm');
+            tips.push('kleed je in laagjes');
+            advice.innerHTML = '<strong>Advies:</strong> ' + tips.join('. ') + '.';
+
+            document.getElementById('weather-source').textContent = 'Live forecast via Open-Meteo.com \u2014 laatst geladen ' + new Date().toLocaleString('nl-NL', {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+
+        }).catch(function() {
+            // Fallback: show static data
+            var grid = document.getElementById('weather-grid');
+            grid.innerHTML = '<div class="weather-card"><div class="weather-day">Vr 27 mrt</div><div class="weather-icon">\u26C5</div><div class="weather-temp">12\u00B0C / 4\u00B0C</div><div class="weather-desc">Forecast niet beschikbaar<br>Check buienradar.nl</div></div>';
+        });
+    })();
+
+    /* ═══════════════════════════════════════
+       17. COLLAPSIBLE SECTIONS
        ═══════════════════════════════════════ */
     document.querySelectorAll('.section-animate .container').forEach(function(container) {
         var h2 = container.querySelector('h2');
